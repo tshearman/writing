@@ -1,0 +1,7 @@
+_site/
+_cache/
+dist-newstyle/
+.direnv/
+result
+.vscode/
+

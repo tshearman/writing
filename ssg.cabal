@@ -1,0 +1,49 @@
+cabal-version:  3.0
+name:           ssg
+version:        0.1.0.0
+build-type:     Simple
+
+library
+  exposed-modules:
+    SSG.Post
+    SSG.Render
+    SSG.Build
+    Site.Layout
+    Site.Pages.Home
+    Site.Pages.Post
+  hs-source-dirs: src
+  default-language: Haskell2010
+  ghc-options: -Wall
+  build-depends:
+    , base                  >= 4.12 && < 5
+    , text
+    , aeson
+    , yaml
+    , pandoc               >= 3.0
+    , pandoc-types         >= 1.23
+    , lucid2
+    , skylighting
+    , blaze-html
+    , filepath
+    , directory
+    , time
+    , bytestring
+    , containers
+
+executable ssg
+  main-is: Main.hs
+  hs-source-dirs: app
+  default-language: Haskell2010
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base                  >= 4.12 && < 5
+    , ssg
+    , text
+    , optparse-applicative
+    , warp
+    , wai
+    , wai-app-static
+    , filepath
+    , directory
+    , fsnotify
+    , stm
