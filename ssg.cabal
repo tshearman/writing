@@ -9,6 +9,7 @@ library
     SSG.Render
     SSG.Build
     SSG.Config
+    SSG.CodeValidator
     Site.Layout
     Site.Pages.Home
     Site.Pages.Post
@@ -38,6 +39,9 @@ library
     , wai-app-static
     , fsnotify
     , stm
+    , process
+    , temporary
+    , transformers
 
 executable ssg
   main-is: Main.hs

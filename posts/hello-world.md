@@ -26,6 +26,10 @@ fib :: Int -> Int
 fib 0 = 0
 fib 1 = 1
 fib n = fib (n - 1) + fib (n - 2)
+
+main = do
+  assert (fib 4 == 3) "fib 4 should be 3"
+  assert (fib 10 == 55) "fib 10 should be 55"
 ```
 
 And some Python:

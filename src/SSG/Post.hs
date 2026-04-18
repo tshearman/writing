@@ -9,7 +9,11 @@ module SSG.Post
   )
 where
 
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (ExceptT (..), except, runExceptT)
 import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
+import Data.Bifunctor (first)
+import Data.Either (partitionEithers)
 import Data.List (groupBy, sortOn)
 import Data.Ord (Down (..))
 import Data.Text (Text)
@@ -19,6 +23,7 @@ import qualified Data.Text.IO as TIO
 import Data.Time (Day)
 import Data.Yaml (decodeEither')
 import GHC.Generics (Generic)
+import SSG.CodeValidator (validatePost)
 import SSG.Config (frontmatterDelimiter, markdownExt)
 import System.Directory (listDirectory)
 import System.FilePath (takeBaseName, takeExtension, (</>))
@@ -67,47 +72,54 @@ parseFrontMatter content =
         Right fm -> Right (fm, T.intercalate (T.pack frontmatterDelimiter) rest)
     _ -> Left "No frontmatter found (expected --- delimiters)"
 
+markdownReaderOpts :: ReaderOptions
+markdownReaderOpts =
+  def
+    { readerExtensions =
+        enableExtension Ext_tex_math_dollars githubMarkdownExtensions
+    }
+
 loadPost :: FilePath -> IO (Either String Post)
-loadPost path = do
-  content <- TIO.readFile path
+loadPost path = runExceptT $ do
+  content <- liftIO $ TIO.readFile path
   let slug = T.pack (takeBaseName path)
-      readerOpts =
-        def
-          { readerExtensions =
-              enableExtension Ext_tex_math_dollars githubMarkdownExtensions
+
+  (fm, body) <- except $ parseFrontMatter content
+  pandoc <- except $ first show $ runPure (readMarkdown markdownReaderOpts body)
+
+  validationResult <- liftIO $ validatePost path pandoc
+  case validationResult of
+    Just err -> except $ Left err
+    Nothing ->
+      pure
+        Post
+          { postTitle = fmTitle fm,
+            postDescription = fmDescription fm,
+            postDate = fmPubDate fm,
+            postTags = fmTags fm,
+            postDraft = fmDraft fm,
+            postFeatured = fmFeatured fm,
+            postSlug = slug,
+            postBody = pandoc
           }
-  pure $ do
-    (fm, body) <- parseFrontMatter content
-    pandoc <- case runPure (readMarkdown readerOpts body) of
-      Left err -> Left (show err)
-      Right doc -> Right doc
-    Right
-      Post
-        { postTitle = fmTitle fm,
-          postDescription = fmDescription fm,
-          postDate = fmPubDate fm,
-          postTags = fmTags fm,
-          postDraft = fmDraft fm,
-          postFeatured = fmFeatured fm,
-          postSlug = slug,
-          postBody = pandoc
-        }
 
 loadPosts :: FilePath -> IO [Post]
 loadPosts dir = do
   files <- listDirectory dir
-  let mdFiles = filter (\f -> takeExtension f == markdownExt) files
-  results <- mapM (loadPost . (dir </>)) mdFiles
-  let posts = [p | Right p <- results, not (postDraft p)]
-  pure $ sortOn (Down . postDate) posts
+  results <- mapM (loadPost . (dir </>)) (markdownFiles files)
+  let (errors, allPosts) = partitionEithers results
+  mapM_ putStrLn errors
+  pure (sortedNonDrafts allPosts)
+  where
+    markdownFiles = filter ((== markdownExt) . takeExtension)
+    sortedNonDrafts = sortOn (Down . postDate) . filter (not . postDraft)
 
 -- | Group posts by their publication year
 -- Posts must be sorted by date (newest first) for proper grouping
 groupPostsByYear :: (Day -> Integer) -> [Post] -> [(Integer, [Post])]
-groupPostsByYear getYear posts =
-  let postsWithYear = map (\p -> (getYear (postDate p), p)) posts
-      grouped = groupBy (\(y1, _) (y2, _) -> y1 == y2) postsWithYear
-   in map groupToYearPosts grouped
+groupPostsByYear getYear posts = map toYearGroup grouped
   where
-    groupToYearPosts group@((year, _) : _) = (year, map snd group)
-    groupToYearPosts [] = (0, []) -- Should never happen with groupBy
+    postsWithYear = map (\p -> (getYear (postDate p), p)) posts
+    grouped = groupBy (\(y1, _) (y2, _) -> y1 == y2) postsWithYear
+    toYearGroup [] = error "groupBy never produces empty groups"
+    toYearGroup group@((year, _) : _) = (year, map snd group)

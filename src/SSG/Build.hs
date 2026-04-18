@@ -5,7 +5,6 @@ module SSG.Build
   ( buildSite,
     cleanSite,
     watchAndServe,
-    -- * Directory constants
     postsDir,
     staticDir,
     outputDir,
