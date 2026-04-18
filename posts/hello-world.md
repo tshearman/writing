@@ -1,7 +1,6 @@
 ---
 title: "Hello World"
 description: "A first post to test the custom static site generator."
-abstract: "This post exercises the basic features of the SSG: markdown rendering, code blocks, and inline formatting."
 pubDate: "2026-04-15"
 tags: [intro, test]
 draft: false
@@ -39,6 +38,18 @@ def fib(n):
     return a
 ```
 
+## Math rendering test
+
+The Sine-Gordon equation is a nonlinear hyperbolic partial differential equation in 1+1 dimensions. The equation is:
+
+$$
+\frac{\partial^2 \phi}{\partial t^2} - \frac{\partial^2 \phi}{\partial x^2} + \sin(\phi) = 0
+$$
+
+Or in subscript notation: $\phi_{tt} - \phi_{xx} + \sin(\phi) = 0$.
+
+This equation arises in differential geometry and physics, describing the motion of a rigid pendulum attached to a stretched wire.
+
 ## What's next?
 
-Future posts will explore more features as they're built: math rendering with KaTeX, margin notes, interactive charts, and compile-time code execution.
+Future posts will explore more features as they're built: margin notes, interactive charts, and compile-time code execution.

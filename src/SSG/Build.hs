@@ -1,74 +1,120 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SSG.Build
-  ( buildSite
-  , cleanSite
-  ) where
+  ( buildSite,
+    cleanSite,
+    watchAndServe,
+    -- * Directory constants
+    postsDir,
+    staticDir,
+    outputDir,
+  )
+where
 
-import qualified Data.Text.Lazy as TL
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
+import Control.Monad (forever, void, when)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Logger (MonadLogger, logInfo, runStdoutLoggingT)
+import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as TLIO
 import Lucid (Html, renderText)
+import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
+import qualified Network.Wai.Handler.Warp as Warp
+import SSG.Config (devServerPort, homepageFile, htmlExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
 import SSG.Post (Post (..), loadPosts)
+import Site.Pages.Archive (renderArchivePage)
 import Site.Pages.Home (renderHomePage)
 import Site.Pages.Post (renderPostPage)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist,
-                         listDirectory, removeDirectoryRecursive, copyFile)
-import System.FilePath ((</>), takeFileName)
+import System.Directory
+  ( copyFile,
+    createDirectoryIfMissing,
+    doesDirectoryExist,
+    getCurrentDirectory,
+    listDirectory,
+    removeDirectoryRecursive,
+  )
+import System.FSNotify (watchTree, withManager)
+import System.FilePath ((</>))
 
-outputDir :: FilePath
-outputDir = "_site"
-
-buildSite :: IO ()
+buildSite :: (MonadLogger m, MonadIO m) => m ()
 buildSite = do
-  putStrLn "Building site..."
-  createDirectoryIfMissing True (outputDir </> "posts")
+  $(logInfo) "Building site..."
+  liftIO $ createDirectoryIfMissing True (outputDir </> postsDir)
 
-  posts <- loadPosts "posts"
-  putStrLn $ "  Found " ++ show (length posts) ++ " post(s)"
+  posts <- liftIO $ loadPosts postsDir
+  $(logInfo) $ "Found " <> T.pack (show (length posts)) <> " post(s)"
 
   mapM_ writePost posts
-  writeHtml (outputDir </> "index.html") (renderHomePage posts)
+  liftIO $ writeHtml (outputDir </> homepageFile) (renderHomePage posts)
+  liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage posts)
 
   copyStatic
-  putStrLn "  Done."
+  $(logInfo) "Done."
 
-writePost :: Post -> IO ()
+writePost :: (MonadLogger m, MonadIO m) => Post -> m ()
 writePost post = do
-  let path = outputDir </> "posts" </> TL.unpack (TL.fromStrict (postSlug post)) ++ ".html"
-  writeHtml path (renderPostPage post)
-  putStrLn $ "  Wrote " ++ path
+  let path = outputDir </> postsDir </> T.unpack (postSlug post) ++ htmlExt
+  liftIO $ writeHtml path (renderPostPage post)
+  $(logInfo) $ "Wrote " <> T.pack path
 
 writeHtml :: FilePath -> Html () -> IO ()
 writeHtml path html = TLIO.writeFile path (renderText html)
 
-copyStatic :: IO ()
+copyStatic :: (MonadLogger m, MonadIO m) => m ()
 copyStatic = do
-  exists <- doesDirectoryExist "static"
-  if exists
-    then copyDir "static" outputDir
-    else pure ()
+  exists <- liftIO $ doesDirectoryExist staticDir
+  when exists $ copyDir staticDir outputDir
 
-copyDir :: FilePath -> FilePath -> IO ()
+copyDir :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> m ()
 copyDir src dst = do
-  entries <- listDirectory src
+  entries <- liftIO $ listDirectory src
   mapM_ (copyEntry src dst) entries
 
-copyEntry :: FilePath -> FilePath -> FilePath -> IO ()
+copyEntry :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> FilePath -> m ()
 copyEntry src dst name = do
   let srcPath = src </> name
       dstPath = dst </> name
-  isDir <- doesDirectoryExist srcPath
+  isDir <- liftIO $ doesDirectoryExist srcPath
   if isDir
     then do
-      createDirectoryIfMissing True dstPath
+      liftIO $ createDirectoryIfMissing True dstPath
       copyDir srcPath dstPath
-    else copyFile srcPath dstPath
+    else liftIO $ copyFile srcPath dstPath
 
-cleanSite :: IO ()
+cleanSite :: (MonadLogger m, MonadIO m) => m ()
 cleanSite = do
-  exists <- doesDirectoryExist outputDir
+  exists <- liftIO $ doesDirectoryExist outputDir
   if exists
     then do
-      removeDirectoryRecursive outputDir
-      putStrLn "Cleaned _site/"
-    else putStrLn "_site/ does not exist"
+      liftIO $ removeDirectoryRecursive outputDir
+      $(logInfo) "Cleaned _site/"
+    else $(logInfo) "_site/ does not exist"
+
+watchAndServe :: (MonadLogger m, MonadIO m) => m ()
+watchAndServe = do
+  buildSite
+  cwd <- liftIO getCurrentDirectory
+
+  dirty <- liftIO $ newTVarIO False
+  $(logInfo) $ "Watching for changes... Serving on http://localhost:" <> T.pack (show devServerPort)
+
+  liftIO $ withManager $ \mgr -> do
+    let markDirty _ = atomically $ writeTVar dirty True
+
+    void $ watchTree mgr (cwd </> postsDir) (const True) markDirty
+    void $ watchTree mgr (cwd </> staticDir) (const True) markDirty
+
+    void $ forkIO $ forever $ do
+      threadDelay (rebuildDebounceMs * 1000)
+      isDirty <- readTVarIO dirty
+      when isDirty $ do
+        atomically $ writeTVar dirty False
+        runStdoutLoggingT $ do
+          $(logInfo) "\nRebuild triggered..."
+          buildSite
+
+    let settings = Warp.setPort devServerPort Warp.defaultSettings
+    Warp.runSettings settings $
+      staticApp (defaultFileServerSettings outputDir)
