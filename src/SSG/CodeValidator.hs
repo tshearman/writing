@@ -8,7 +8,7 @@ module SSG.CodeValidator
 where
 
 import Control.Concurrent.Async (mapConcurrently)
-import qualified Data.Maybe
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -57,7 +57,7 @@ validatePost doc = do
   let codeBlocks = extractCodeBlocks doc
       haskellBlocks = filter (\(lang, _) -> lang == "haskell") codeBlocks
   results <- mapConcurrently (validateHaskellCode preamble . snd) haskellBlocks
-  pure (Data.Maybe.catMaybes results)
+  pure (catMaybes results)
 
 validateHaskellCode :: Maybe Text -> Text -> IO (Maybe ValidationError)
 validateHaskellCode preamble code = do

@@ -6,23 +6,20 @@ module Site.Components.PostCard
   )
 where
 
+import Data.Foldable (traverse_)
 import Data.Text (Text)
-import qualified Data.Text as T
 import Lucid
-import SSG.Config (htmlExt, postsDir)
-import SSG.Post (Post (..))
+import SSG.Post (Post (..), postUrl)
 import Site.Utils.Format (formatDay)
 
 renderPostCard :: Post -> Html ()
 renderPostCard post =
   article_ [class_ "post-card"] $ do
-    h2_ $ a_ [href_ ("/" <> T.pack postsDir <> "/" <> postSlug post <> T.pack htmlExt)] (toHtml (postTitle post))
+    h2_ $ a_ [href_ (postUrl post)] (toHtml (postTitle post))
     div_ [class_ "post-meta"] $ do
       time_ (toHtml (formatDay (postDate post)))
       renderTags (postTags post)
-    case postDescription post of
-      Just desc -> p_ [class_ "description"] (toHtml desc)
-      Nothing -> pure ()
+    traverse_ (p_ [class_ "description"] . toHtml) (postDescription post)
 
 renderTags :: [Text] -> Html ()
 renderTags [] = pure ()

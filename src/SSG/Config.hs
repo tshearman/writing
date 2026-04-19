@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module SSG.Config
   ( postsDir,
     staticDir,
@@ -12,8 +14,7 @@ module SSG.Config
   )
 where
 
-import Data.Text
-import qualified Data.Text as T
+import Data.Text (Text)
 
 -- | Output directory for built site
 outputDir :: FilePath
@@ -41,7 +42,7 @@ homepageFile = "index.html"
 
 -- | Frontmatter delimiter for markdown posts
 frontmatterDelimiter :: Text
-frontmatterDelimiter = T.pack "---"
+frontmatterDelimiter = "---\n"
 
 -- | Development server port
 devServerPort :: Int

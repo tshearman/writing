@@ -7,6 +7,7 @@ module SSG.Render
   )
 where
 
+import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Lucid
@@ -75,10 +76,9 @@ renderFootnote blocks =
 
 renderCodeBlock :: Attr -> Text -> Html ()
 renderCodeBlock (_, classes, _) code =
-  pre_ $
-    if null classes
-      then code_ (toHtml code)
-      else code_ [class_ ("language-" <> head classes)] (toHtml code)
+  pre_ $ case classes of
+    []      -> code_ (toHtml code)
+    (c : _) -> code_ [class_ ("language-" <> c)] (toHtml code)
 
 divWithAttr :: Attr -> Html () -> Html ()
 divWithAttr ("", [], []) inner = div_ inner
@@ -116,6 +116,3 @@ renderTable (TableHead _ headRows) bodies (TableFoot _ footRows) =
     renderRow (Row _ cells) = tr_ $ mapM_ renderCell cells
     renderCell :: Cell -> Html ()
     renderCell (Cell _ _ _ _ blocks) = td_ (renderBlocks blocks)
-    unless :: Bool -> Html () -> Html ()
-    unless False m = m
-    unless True _ = pure ()

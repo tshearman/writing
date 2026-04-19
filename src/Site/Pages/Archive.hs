@@ -5,10 +5,9 @@ module Site.Pages.Archive
   )
 where
 
-import qualified Data.Text as T
+import Data.Foldable (traverse_)
 import Lucid
-import SSG.Config (htmlExt, postsDir)
-import SSG.Post (Post (..), SortedPosts, groupPostsByYear)
+import SSG.Post (Post (..), SortedPosts, groupPostsByYear, postUrl)
 import Site.Layout (renderPage)
 import Site.Utils.Format (formatDay, getYear)
 
@@ -30,8 +29,5 @@ renderArchiveItem :: Post -> Html ()
 renderArchiveItem post =
   li_ $ do
     span_ [class_ "date"] (toHtml $ formatDay (postDate post))
-    a_ [href_ ("/" <> T.pack postsDir <> "/" <> postSlug post <> T.pack htmlExt)] $
-      toHtml (postTitle post)
-    case postDescription post of
-      Just desc -> span_ [class_ "description"] (toHtml $ " — " <> desc)
-      Nothing -> pure ()
+    a_ [href_ (postUrl post)] (toHtml (postTitle post))
+    traverse_ (\desc -> span_ [class_ "description"] (toHtml $ " — " <> desc)) (postDescription post)

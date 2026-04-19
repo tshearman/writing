@@ -11,6 +11,7 @@ module SSG.Post
     filterDrafts,
     loadPost,
     groupPostsByYear,
+    postUrl,
   )
 where
 
@@ -28,7 +29,7 @@ import qualified Data.Text.IO as TIO
 import Data.Time (Day)
 import Data.Yaml (decodeEither')
 import GHC.Generics (Generic)
-import SSG.Config (frontmatterDelimiter)
+import SSG.Config (frontmatterDelimiter, htmlExt, postsDir)
 import System.FilePath (takeBaseName)
 import Text.Pandoc (Pandoc, PandocError, def, readMarkdown, runPure)
 import Text.Pandoc.Extensions (Extension (..), enableExtension, githubMarkdownExtensions)
@@ -75,6 +76,9 @@ byDateDesc a b = compare (Down (postDate a)) (Down (postDate b))
 filterDrafts :: [Post] -> [Post]
 filterDrafts = filter (not . postDraft)
 
+postUrl :: Post -> Text
+postUrl post = "/" <> T.pack postsDir <> "/" <> postSlug post <> T.pack htmlExt
+
 instance FromJSON FrontMatter where
   parseJSON = withObject "FrontMatter" $ \o ->
     FrontMatter
@@ -94,10 +98,9 @@ parseFrontMatter content =
       pure (fm, body)
 
 extractYamlAndBody :: Text -> Maybe (Text, Text)
-extractYamlAndBody content =
-  case T.splitOn (frontmatterDelimiter <> "\n") content of
-    ("" : yaml : rest) -> Just (yaml, T.intercalate frontmatterDelimiter rest)
-    _ -> Nothing
+extractYamlAndBody content
+  | ("" : yaml : rest) <- T.splitOn frontmatterDelimiter content = Just (yaml, T.intercalate frontmatterDelimiter rest)
+  | otherwise = Nothing
 
 decodeYaml :: Text -> Either String FrontMatter
 decodeYaml yaml = first show $ decodeEither' (TE.encodeUtf8 yaml)
