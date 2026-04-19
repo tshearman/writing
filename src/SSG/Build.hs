@@ -102,6 +102,7 @@ buildSite mode = do
   liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage sortedPosts)
 
   copyStatic
+  copyPostAssets
   $(logInfo) "Done."
 
 writeHtml :: FilePath -> Html () -> IO ()
@@ -112,13 +113,19 @@ copyStatic = do
   exists <- liftIO $ doesDirectoryExist staticDir
   when exists $ copyDir staticDir outputDir
 
+copyPostAssets :: (MonadLogger m, MonadIO m) => m ()
+copyPostAssets = do
+  files <- liftIO $ listDirectory postsDir
+  let assets = filter ((/= markdownExt) . takeExtension) files
+  mapM_ (copyPath postsDir (outputDir </> postsDir)) assets
+
 copyDir :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> m ()
 copyDir src dst = do
   entries <- liftIO $ listDirectory src
-  mapM_ (copyEntry src dst) entries
+  mapM_ (copyPath src dst) entries
 
-copyEntry :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> FilePath -> m ()
-copyEntry src dst name = do
+copyPath :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> FilePath -> m ()
+copyPath src dst name = do
   let srcPath = src </> name
       dstPath = dst </> name
   isDir <- liftIO $ doesDirectoryExist srcPath

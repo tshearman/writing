@@ -31,8 +31,8 @@ import Data.Yaml (decodeEither')
 import GHC.Generics (Generic)
 import SSG.Config (frontmatterDelimiter, htmlExt, postsDir)
 import System.FilePath (takeBaseName)
-import Text.Pandoc (Pandoc, PandocError, def, readMarkdown, runPure)
-import Text.Pandoc.Extensions (Extension (..), enableExtension, githubMarkdownExtensions)
+import Text.Pandoc (Pandoc, PandocError, def, extensionsFromList, readMarkdown, runPure)
+import Text.Pandoc.Extensions (Extension (..), githubMarkdownExtensions)
 import Text.Pandoc.Options (ReaderOptions (..))
 
 data Post = Post
@@ -109,7 +109,15 @@ markdownReaderOpts :: ReaderOptions
 markdownReaderOpts =
   def
     { readerExtensions =
-        enableExtension Ext_tex_math_dollars githubMarkdownExtensions
+        githubMarkdownExtensions
+          <> extensionsFromList
+            [ Ext_tex_math_dollars,
+              Ext_inline_notes,
+              Ext_subscript,
+              Ext_superscript,
+              Ext_line_blocks,
+              Ext_link_attributes
+            ]
     }
 
 loadPost :: FilePath -> IO (Either ParseError Post)
