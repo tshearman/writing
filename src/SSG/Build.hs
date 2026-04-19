@@ -29,6 +29,7 @@ import SSG.Post (ParseError, Post (..), byDateDesc, filterDrafts, getPosts, load
 import Site.Pages.Archive (renderArchivePage)
 import Site.Pages.Home (renderHomePage)
 import Site.Pages.Post (renderPostPage)
+import Site.Pages.Search (renderSearchPage)
 import System.Directory
   ( copyFile,
     createDirectoryIfMissing,
@@ -39,6 +40,7 @@ import System.Directory
   )
 import System.FSNotify (watchTree, withManager)
 import System.FilePath (takeExtension, (</>))
+import System.Process (callProcess)
 
 data BuildMode = ProductionMode | DevelopmentMode
   deriving (Eq)
@@ -101,8 +103,10 @@ buildSite mode = do
   liftIO $ writeHtml (outputDir </> homepageFile) (renderHomePage (getPosts sortedPosts))
   liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage sortedPosts)
 
+  liftIO $ writeHtml (outputDir </> "search" ++ htmlExt) renderSearchPage
   copyStatic
   copyPostAssets
+  when (mode == ProductionMode) runPagefind
   $(logInfo) "Done."
 
 writeHtml :: FilePath -> Html () -> IO ()
@@ -144,9 +148,15 @@ cleanSite = do
       $(logInfo) "Cleaned _site/"
     else $(logInfo) "_site/ does not exist"
 
-watchAndServe :: (MonadLogger m, MonadIO m) => m ()
-watchAndServe = do
+runPagefind :: (MonadLogger m, MonadIO m) => m ()
+runPagefind = do
+  $(logInfo) "Running pagefind..."
+  liftIO $ callProcess "pagefind" ["--site", outputDir]
+
+watchAndServe :: (MonadLogger m, MonadIO m) => Bool -> m ()
+watchAndServe withSearch = do
   buildSite DevelopmentMode
+  when withSearch runPagefind
   cwd <- liftIO getCurrentDirectory
 
   dirty <- liftIO $ newTVarIO False
@@ -166,6 +176,7 @@ watchAndServe = do
         runStdoutLoggingT $ do
           $(logInfo) "\nRebuild triggered..."
           buildSite DevelopmentMode
+          when withSearch runPagefind
 
     let settings = Warp.setPort devServerPort Warp.defaultSettings
     Warp.runSettings settings $

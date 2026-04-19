@@ -29,13 +29,15 @@
               hpkgs.ghcid
               hpkgs.ormolu
               pkgs.git
+              pkgs.pagefind
             ];
             shellHook = ''
               echo ""
               echo "  SSG dev environment"
-              echo "  cabal run ssg -- build   build site to ./_site"
-              echo "  cabal run ssg -- watch   watch & serve on localhost:8000"
-              echo "  cabal run ssg -- clean   clean build artifacts"
+              echo "  cabal run ssg -- build          build site + search index"
+              echo "  cabal run ssg -- watch          watch & serve on localhost:8000"
+              echo "  cabal run ssg -- watch --search watch with search index rebuilds"
+              echo "  cabal run ssg -- clean          clean build artifacts"
               echo ""
               [[ $- == *i* ]] && exec zsh
             '';

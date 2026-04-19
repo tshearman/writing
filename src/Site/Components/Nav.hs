@@ -17,3 +17,4 @@ renderNav =
       div_ [class_ "nav-links"] $ do
         a_ [href_ "/"] "Home"
         a_ [href_ "/archive.html"] "Archive"
+        a_ [href_ "/search.html"] "Search"

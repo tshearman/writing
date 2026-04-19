@@ -18,6 +18,7 @@ renderPage title content =
       meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1"]
       title_ (toHtml title)
       link_ [rel_ "stylesheet", href_ "/css/style.css"]
+      link_ [rel_ "modulepreload", href_ "/pagefind/pagefind.js"]
       renderKaTeXScripts
     body_ $ do
       renderNav

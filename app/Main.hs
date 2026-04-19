@@ -6,15 +6,26 @@ import Control.Monad.Logger (runStdoutLoggingT)
 import Options.Applicative
 import SSG.Build (BuildMode (..), buildSite, cleanSite, watchAndServe)
 
-data Command = Build | Clean | Watch
+data Command
+  = Build
+  | Clean
+  | Watch {withSearch :: Bool}
 
 commandParser :: Parser Command
 commandParser =
   subparser
-    ( command "build" (info (pure Build) (progDesc "Build site to _site/"))
+    ( command "build" (info (pure Build) (progDesc "Build site + search index"))
         <> command "clean" (info (pure Clean) (progDesc "Remove _site/"))
-        <> command "watch" (info (pure Watch) (progDesc "Build, watch for changes, serve on localhost:8000"))
+        <> command "watch" (info watchParser (progDesc "Watch & serve on localhost:8000"))
     )
+
+watchParser :: Parser Command
+watchParser =
+  Watch
+    <$> switch
+      ( long "search"
+          <> help "Run pagefind on each rebuild (slower but search works locally)"
+      )
 
 main :: IO ()
 main = do
@@ -27,4 +38,4 @@ main = do
   case cmd of
     Build -> runStdoutLoggingT (buildSite ProductionMode)
     Clean -> runStdoutLoggingT cleanSite
-    Watch -> runStdoutLoggingT watchAndServe
+    Watch search -> runStdoutLoggingT (watchAndServe search)
