@@ -116,7 +116,8 @@ markdownReaderOpts =
               Ext_subscript,
               Ext_superscript,
               Ext_line_blocks,
-              Ext_link_attributes
+              Ext_link_attributes,
+              Ext_implicit_figures
             ]
     }
 

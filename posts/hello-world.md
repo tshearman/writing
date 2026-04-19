@@ -110,3 +110,9 @@ The SSG supports images from three sources:
 ![Haskell logo](https://www.haskell.org/img/haskell-logo.svg "The Haskell logo")
 
 **Post-local images** can be placed alongside markdown files and referenced with relative paths like `./diagram.png`.
+
+## Figures
+
+A standalone image paragraph becomes a figure with a caption:
+
+![The Nix logo, representing reproducible builds](/images/nix.svg){width=150px}

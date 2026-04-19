@@ -33,9 +33,9 @@ renderBlock HorizontalRule = hr_ []
 renderBlock (Div attr blocks) = divWithAttr attr (renderBlocks blocks)
 renderBlock (Table _ _ _ thead tbodies tfoot) = renderTable thead tbodies tfoot
 renderBlock (LineBlock lns) = div_ [class_ "line-block"] $ mapM_ (\l -> renderInlines l >> br_ []) lns
-renderBlock DefinitionList {} = pure () -- not supported
-renderBlock Figure {} = pure () -- not supported
-renderBlock RawBlock {} = pure () -- non-HTML raw blocks ignored
+renderBlock DefinitionList {} = pure ()
+renderBlock (Figure attr caption blocks) = renderFigure attr caption blocks
+renderBlock RawBlock {} = pure ()
 
 withLevel :: Int -> Html () -> Html ()
 withLevel 1 = h1_
@@ -87,6 +87,13 @@ renderImage (_, _, kvs) inls (url, title) =
       ++ [title_ title | not (T.null title)]
       ++ [width_ w | Just w <- [lookup "width" kvs]]
       ++ [height_ h | Just h <- [lookup "height" kvs]]
+
+renderFigure :: Attr -> Caption -> [Block] -> Html ()
+renderFigure attr (Caption _ captionBlocks) blocks =
+  figure_ (attrList attr) $ do
+    renderBlocks blocks
+    unless (null captionBlocks) $
+      figcaption_ (renderBlocks captionBlocks)
 
 renderCodeBlock :: Attr -> Text -> Html ()
 renderCodeBlock (_, classes, _) code =
