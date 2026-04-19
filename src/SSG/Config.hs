@@ -12,6 +12,9 @@ module SSG.Config
   )
 where
 
+import Data.Text
+import qualified Data.Text as T
+
 -- | Output directory for built site
 outputDir :: FilePath
 outputDir = "_site"
@@ -37,8 +40,8 @@ homepageFile :: FilePath
 homepageFile = "index.html"
 
 -- | Frontmatter delimiter for markdown posts
-frontmatterDelimiter :: String
-frontmatterDelimiter = "---"
+frontmatterDelimiter :: Text
+frontmatterDelimiter = T.pack "---"
 
 -- | Development server port
 devServerPort :: Int

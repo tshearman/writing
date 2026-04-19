@@ -2,7 +2,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module SSG.Build
-  ( buildSite,
+  ( BuildMode (..),
+    buildSite,
     cleanSite,
     watchAndServe,
     postsDir,
@@ -12,17 +13,19 @@ module SSG.Build
 where
 
 import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.Async (concurrently, mapConcurrently)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
-import Control.Monad (forever, void, when)
+import Control.Monad (forever, unless, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Logger (MonadLogger, logInfo, runStdoutLoggingT)
+import Control.Monad.Logger (MonadLogger, logInfo, logWarn, runStdoutLoggingT)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as TLIO
 import Lucid (Html, renderText)
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai.Handler.Warp as Warp
-import SSG.Config (devServerPort, homepageFile, htmlExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
-import SSG.Post (Post (..), loadPosts)
+import SSG.CodeValidator (ValidationError, formatValidationError, validatePost)
+import SSG.Config (devServerPort, homepageFile, htmlExt, markdownExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
+import SSG.Post (ParseError, Post (..), byDateDesc, filterDrafts, getPosts, loadPost, sortPostsBy)
 import Site.Pages.Archive (renderArchivePage)
 import Site.Pages.Home (renderHomePage)
 import Site.Pages.Post (renderPostPage)
@@ -35,28 +38,71 @@ import System.Directory
     removeDirectoryRecursive,
   )
 import System.FSNotify (watchTree, withManager)
-import System.FilePath ((</>))
+import System.FilePath (takeExtension, (</>))
 
-buildSite :: (MonadLogger m, MonadIO m) => m ()
-buildSite = do
+data BuildMode = ProductionMode | DevelopmentMode
+  deriving (Eq)
+
+data PostResult
+  = PostSuccess Post [ValidationError]
+  | PostFailure ParseError
+
+processPost :: BuildMode -> FilePath -> IO PostResult
+processPost mode path = do
+  result <- loadPost path
+  case result of
+    Left err -> pure (PostFailure err)
+    Right post -> do
+      if postDraft post && mode == ProductionMode
+        then pure (PostSuccess post [])
+        else do
+          (errors, html) <-
+            concurrently
+              (validatePost (postBody post))
+              (pure (renderPostPage post))
+          let outPath = outputDir </> postsDir </> T.unpack (postSlug post) ++ htmlExt
+          writeHtml outPath html
+          pure (PostSuccess post errors)
+
+partitionResults :: [PostResult] -> ([ParseError], [Post], [ValidationError])
+partitionResults = foldMap toTriple
+  where
+    toTriple (PostFailure err) = ([err], [], [])
+    toTriple (PostSuccess post errs) = ([], [post], errs)
+
+buildSite :: (MonadLogger m, MonadIO m) => BuildMode -> m ()
+buildSite mode = do
   $(logInfo) "Building site..."
   liftIO $ createDirectoryIfMissing True (outputDir </> postsDir)
 
-  posts <- liftIO $ loadPosts postsDir
-  $(logInfo) $ "Found " <> T.pack (show (length posts)) <> " post(s)"
+  files <- liftIO $ listDirectory postsDir
+  let mdFiles = filter ((== markdownExt) . takeExtension) files
+      paths = map (postsDir </>) mdFiles
 
-  mapM_ writePost posts
-  liftIO $ writeHtml (outputDir </> homepageFile) (renderHomePage posts)
-  liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage posts)
+  $(logInfo) $ "Found " <> T.pack (show (length paths)) <> " post(s)"
+
+  results <- liftIO $ mapConcurrently (processPost mode) paths
+  let (parseErrors, posts, validationErrors) = partitionResults results
+
+  mapM_ ($(logInfo) . T.pack . show) parseErrors
+
+  case mode of
+    ProductionMode -> do
+      unless (null validationErrors) $ do
+        mapM_ ($(logInfo) . formatValidationError) validationErrors
+        error "Build failed: code validation errors"
+    DevelopmentMode ->
+      mapM_ ($(logWarn) . formatValidationError) validationErrors
+
+  let filteredPosts = case mode of
+        ProductionMode -> filterDrafts posts
+        DevelopmentMode -> posts
+      sortedPosts = sortPostsBy byDateDesc filteredPosts
+  liftIO $ writeHtml (outputDir </> homepageFile) (renderHomePage (getPosts sortedPosts))
+  liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage sortedPosts)
 
   copyStatic
   $(logInfo) "Done."
-
-writePost :: (MonadLogger m, MonadIO m) => Post -> m ()
-writePost post = do
-  let path = outputDir </> postsDir </> T.unpack (postSlug post) ++ htmlExt
-  liftIO $ writeHtml path (renderPostPage post)
-  $(logInfo) $ "Wrote " <> T.pack path
 
 writeHtml :: FilePath -> Html () -> IO ()
 writeHtml path html = TLIO.writeFile path (renderText html)
@@ -93,7 +139,7 @@ cleanSite = do
 
 watchAndServe :: (MonadLogger m, MonadIO m) => m ()
 watchAndServe = do
-  buildSite
+  buildSite DevelopmentMode
   cwd <- liftIO getCurrentDirectory
 
   dirty <- liftIO $ newTVarIO False
@@ -112,7 +158,7 @@ watchAndServe = do
         atomically $ writeTVar dirty False
         runStdoutLoggingT $ do
           $(logInfo) "\nRebuild triggered..."
-          buildSite
+          buildSite DevelopmentMode
 
     let settings = Warp.setPort devServerPort Warp.defaultSettings
     Warp.runSettings settings $

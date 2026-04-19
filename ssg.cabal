@@ -23,6 +23,7 @@ library
   ghc-options: -Wall
   build-depends:
     , base                  >= 4.12 && < 5
+    , async
     , text
     , aeson
     , yaml

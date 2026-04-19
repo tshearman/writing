@@ -8,11 +8,11 @@ where
 import qualified Data.Text as T
 import Lucid
 import SSG.Config (htmlExt, postsDir)
-import SSG.Post (Post (..), groupPostsByYear)
+import SSG.Post (Post (..), SortedPosts, groupPostsByYear)
 import Site.Layout (renderPage)
 import Site.Utils.Format (formatDay, getYear)
 
-renderArchivePage :: [Post] -> Html ()
+renderArchivePage :: SortedPosts -> Html ()
 renderArchivePage posts =
   renderPage "Archive" $
     div_ [class_ "archive"] $ do
