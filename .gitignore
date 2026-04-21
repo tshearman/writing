@@ -5,3 +5,7 @@ dist-newstyle/
 result
 .vscode/
 .claude/
+
+# JS build artifacts
+static/js/
+js/node_modules/

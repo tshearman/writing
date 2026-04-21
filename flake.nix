@@ -2,7 +2,7 @@
   description = "Custom Haskell static site generator";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -30,6 +30,14 @@
               hpkgs.ormolu
               pkgs.git
               pkgs.pagefind
+              pkgs.nodejs_20
+              pkgs.esbuild
+              (pkgs.python3.withPackages (ps: with ps; [
+                numpy
+                scipy
+                pandas
+                scikit-learn
+              ]))
             ];
             shellHook = ''
               echo ""

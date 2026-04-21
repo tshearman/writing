@@ -7,18 +7,18 @@ where
 
 import Data.Foldable (traverse_)
 import Lucid
-import SSG.Post (Post (..), SortedPosts, groupPostsByYear, postUrl)
+import SSG.Post (Post (..), Sorted, groupPostsByYear, postUrl)
 import Site.Layout (renderPage)
-import Site.Utils.Format (formatDay, getYear)
+import Utils.Format (formatDay, getYear)
 
-renderArchivePage :: SortedPosts -> Html ()
+renderArchivePage :: Sorted Post -> Html ()
 renderArchivePage posts =
   renderPage "Archive" $
     div_ [class_ "archive"] $ do
       h1_ "Archive"
       mapM_ renderYearGroup (groupPostsByYear getYear posts)
 
-renderYearGroup :: (Integer, [Post]) -> Html ()
+renderYearGroup :: (Integer, Sorted Post) -> Html ()
 renderYearGroup (year, posts) =
   div_ [class_ "year-group"] $ do
     h2_ (toHtml $ show year)

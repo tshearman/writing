@@ -1,16 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Site.Pages.Post
-  ( renderPostPage,
-  )
-where
+module Site.Pages.Post (renderPostPage) where
 
 import Data.Text (Text)
 import Lucid
 import SSG.Post (Post (..))
 import SSG.Render (renderPandoc)
 import Site.Layout (renderPage)
-import Site.Utils.Format (formatDay)
+import Utils.Format (formatDay)
 
 renderPostPage :: Post -> Html ()
 renderPostPage post =

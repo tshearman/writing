@@ -57,6 +57,8 @@ def fib(n):
     for _ in range(n):
         a, b = b, a + b
     return a
+
+assert fib(4) == 3
 ```
 
 ## Math rendering

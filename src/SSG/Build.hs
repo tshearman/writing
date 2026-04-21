@@ -17,37 +17,43 @@ import Control.Concurrent.Async (concurrently, mapConcurrently)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
 import Control.Monad (forever, unless, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Logger (MonadLogger, logInfo, logWarn, runStdoutLoggingT)
+import Control.Monad.Logger (MonadLogger, logWarn, runStdoutLoggingT)
+import Data.List (isInfixOf)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as TLIO
 import Lucid (Html, renderText)
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai.Handler.Warp as Warp
-import SSG.CodeValidator (ValidationError, formatValidationError, validatePost)
-import SSG.Config (devServerPort, homepageFile, htmlExt, markdownExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
-import SSG.Post (ParseError, Post (..), byDateDesc, filterDrafts, getPosts, loadPost, sortPostsBy)
+import SSG.CodeValidator (ValidationError (..), ValidationResult (..), validatePost)
+import SSG.Config (devServerPort, htmlExt, markdownExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
+import Utils.Log (handleProcessResult, logDim, logError, logRebuild, logSuccess, timed)
+import SSG.Post (ParseError, Post (..), byDateDesc, loadPost, sorted)
+import qualified SSG.Post as Post
 import Site.Pages.Archive (renderArchivePage)
 import Site.Pages.Home (renderHomePage)
 import Site.Pages.Post (renderPostPage)
 import Site.Pages.Search (renderSearchPage)
 import System.Directory
-  ( copyFile,
-    createDirectoryIfMissing,
+  ( createDirectoryIfMissing,
     doesDirectoryExist,
     getCurrentDirectory,
     listDirectory,
     removeDirectoryRecursive,
   )
-import System.FSNotify (watchTree, withManager)
+import System.FSNotify (eventPath, watchTree, withManager)
 import System.FilePath (takeExtension, (</>))
-import System.Process (callProcess)
+import System.Process (callProcess, readProcessWithExitCode)
+import Utils.FileSystem (copyDir, copyPath)
 
 data BuildMode = ProductionMode | DevelopmentMode
   deriving (Eq)
 
 data PostResult
-  = PostSuccess Post [ValidationError]
+  = PostSuccess Post [ValidationResult]
   | PostFailure ParseError
+  | PostSkipped
 
 processPost :: BuildMode -> FilePath -> IO PostResult
 processPost mode path = do
@@ -56,58 +62,82 @@ processPost mode path = do
     Left err -> pure (PostFailure err)
     Right post -> do
       if postDraft post && mode == ProductionMode
-        then pure (PostSuccess post [])
+        then pure PostSkipped
         else do
-          (errors, html) <-
+          (valResults, html) <-
             concurrently
-              (validatePost (postBody post))
+              (validatePost path (postBodyLineOffset post) (postBody post))
               (pure (renderPostPage post))
-          let outPath = outputDir </> postsDir </> T.unpack (postSlug post) ++ htmlExt
+          let outPath = outputDir </> postsDir </> T.unpack (Post.postSlug post) ++ htmlExt
           writeHtml outPath html
-          pure (PostSuccess post errors)
+          pure (PostSuccess post valResults)
 
-partitionResults :: [PostResult] -> ([ParseError], [Post], [ValidationError])
+partitionResults :: [PostResult] -> ([ParseError], [Post], [ValidationResult])
 partitionResults = foldMap toTriple
   where
     toTriple (PostFailure err) = ([err], [], [])
-    toTriple (PostSuccess post errs) = ([], [post], errs)
+    toTriple (PostSuccess post valResults) = ([], [post], valResults)
+    toTriple PostSkipped = ([], [], [])
 
 buildSite :: (MonadLogger m, MonadIO m) => BuildMode -> m ()
 buildSite mode = do
-  $(logInfo) "Building site..."
-  liftIO $ createDirectoryIfMissing True (outputDir </> postsDir)
-
-  files <- liftIO $ listDirectory postsDir
-  let mdFiles = filter ((== markdownExt) . takeExtension) files
-      paths = map (postsDir </>) mdFiles
-
-  $(logInfo) $ "Found " <> T.pack (show (length paths)) <> " post(s)"
-
-  results <- liftIO $ mapConcurrently (processPost mode) paths
-  let (parseErrors, posts, validationErrors) = partitionResults results
-
-  mapM_ ($(logInfo) . T.pack . show) parseErrors
-
-  case mode of
-    ProductionMode -> do
-      unless (null validationErrors) $ do
-        mapM_ ($(logInfo) . formatValidationError) validationErrors
-        error "Build failed: code validation errors"
-    DevelopmentMode ->
-      mapM_ ($(logWarn) . formatValidationError) validationErrors
-
-  let filteredPosts = case mode of
-        ProductionMode -> filterDrafts posts
-        DevelopmentMode -> posts
-      sortedPosts = sortPostsBy byDateDesc filteredPosts
-  liftIO $ writeHtml (outputDir </> homepageFile) (renderHomePage (getPosts sortedPosts))
-  liftIO $ writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage sortedPosts)
-
-  liftIO $ writeHtml (outputDir </> "search" ++ htmlExt) renderSearchPage
-  copyStatic
-  copyPostAssets
+  timed "Building site" $ do
+    liftIO $ createDirectoryIfMissing True (outputDir </> postsDir)
+    (posts, validationErrors) <- processPosts mode
+    reportErrors mode validationErrors
+    writePages $ collectPosts posts
+    copyStatic
+    copyPostAssets
+  buildJS
   when (mode == ProductionMode) runPagefind
-  $(logInfo) "Done."
+
+processPosts :: (MonadLogger m, MonadIO m) => BuildMode -> m ([Post], [ValidationError])
+processPosts mode = do
+  files <- liftIO $ listDirectory postsDir
+  let paths = map (postsDir </>) $ filter ((== markdownExt) . takeExtension) files
+  logDim $ "  Found " ++ show (length paths) ++ " post(s)"
+  results <- liftIO $ mapConcurrently (processPost mode) paths
+  let (parseErrors, posts, validationResults) = partitionResults results
+      (blockCount, blockStats, allErrors) = aggregateValidationStats validationResults
+  mapM_ (logError . show) parseErrors
+  displayValidationSummary blockCount blockStats allErrors
+  pure (posts, allErrors)
+
+reportErrors :: (MonadLogger m, MonadIO m) => BuildMode -> [ValidationError] -> m ()
+reportErrors mode errors = unless (null errors) $ do
+  mapM_ ($(logWarn) . T.pack . show) errors
+  when (mode == ProductionMode) $
+    error "Build failed: code validation errors"
+
+collectPosts :: [Post] -> Post.Sorted Post
+collectPosts = sorted byDateDesc
+
+writePages :: (MonadIO m) => Post.Sorted Post -> m ()
+writePages posts = liftIO $ do
+  writeHtml (outputDir </> "index" ++ htmlExt) (renderHomePage posts)
+  writeHtml (outputDir </> "archive" ++ htmlExt) (renderArchivePage posts)
+  writeHtml (outputDir </> "search" ++ htmlExt) renderSearchPage
+
+aggregateValidationStats :: [ValidationResult] -> (Int, Map T.Text (Int, Int), [ValidationError])
+aggregateValidationStats results = (length results, langStats, allErrors)
+  where
+    allErrors = [err | BlockFailure err <- results]
+    langStats = foldr countResult Map.empty results
+    countResult (BlockSuccess lang) = Map.insertWith addPair lang (1, 0)
+    countResult (BlockFailure err) = Map.insertWith addPair (errorLanguage err) (0, 1)
+    addPair (a, b) (c, d) = (a + c, b + d)
+
+displayValidationSummary :: (MonadIO m) => Int -> Map T.Text (Int, Int) -> [ValidationError] -> m ()
+displayValidationSummary 0 _ _ = pure ()
+displayValidationSummary total langStats allErrors = do
+  logDim $ "  Found " ++ show total ++ " code block(s)"
+  mapM_ (logDim . formatLang) (Map.toList langStats)
+  unless (null allErrors) $
+    logError $
+      show (length allErrors) ++ " code block(s) failed validation"
+  where
+    formatLang (lang, (passed, failed)) =
+      "    " ++ T.unpack lang ++ ": " ++ show passed ++ " passed, " ++ show failed ++ " failed"
 
 writeHtml :: FilePath -> Html () -> IO ()
 writeHtml path html = TLIO.writeFile path (renderText html)
@@ -123,35 +153,43 @@ copyPostAssets = do
   let assets = filter ((/= markdownExt) . takeExtension) files
   mapM_ (copyPath postsDir (outputDir </> postsDir)) assets
 
-copyDir :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> m ()
-copyDir src dst = do
-  entries <- liftIO $ listDirectory src
-  mapM_ (copyPath src dst) entries
-
-copyPath :: (MonadLogger m, MonadIO m) => FilePath -> FilePath -> FilePath -> m ()
-copyPath src dst name = do
-  let srcPath = src </> name
-      dstPath = dst </> name
-  isDir <- liftIO $ doesDirectoryExist srcPath
-  if isDir
-    then do
-      liftIO $ createDirectoryIfMissing True dstPath
-      copyDir srcPath dstPath
-    else liftIO $ copyFile srcPath dstPath
-
 cleanSite :: (MonadLogger m, MonadIO m) => m ()
 cleanSite = do
   exists <- liftIO $ doesDirectoryExist outputDir
   if exists
     then do
       liftIO $ removeDirectoryRecursive outputDir
-      $(logInfo) "Cleaned _site/"
-    else $(logInfo) "_site/ does not exist"
+      logSuccess "Cleaned _site/"
+    else logDim "_site/ does not exist"
 
 runPagefind :: (MonadLogger m, MonadIO m) => m ()
-runPagefind = do
-  $(logInfo) "Running pagefind..."
-  liftIO $ callProcess "pagefind" ["--site", outputDir]
+runPagefind = timed "Indexing for search" $ do
+  result <-
+    liftIO $
+      readProcessWithExitCode
+        "pagefind"
+        [ "--site",
+          outputDir
+        ]
+        ""
+  handleProcessResult "pagefind" result
+
+buildJS :: (MonadLogger m, MonadIO m) => m ()
+buildJS = timed "Building JavaScript" $ do
+  liftIO $ callProcess "npm" ["install", "--prefix", "js", "--silent"]
+  result <-
+    liftIO $
+      readProcessWithExitCode
+        "esbuild"
+        [ "js/src/index.jsx",
+          "--bundle",
+          "--format=esm",
+          "--jsx=automatic",
+          "--jsx-import-source=preact",
+          "--outfile=" ++ (staticDir </> "js" </> "search.js")
+        ]
+        ""
+  handleProcessResult "esbuild" result
 
 watchAndServe :: (MonadLogger m, MonadIO m) => Bool -> m ()
 watchAndServe withSearch = do
@@ -160,13 +198,15 @@ watchAndServe withSearch = do
   cwd <- liftIO getCurrentDirectory
 
   dirty <- liftIO $ newTVarIO False
-  $(logInfo) $ "Watching for changes... Serving on http://localhost:" <> T.pack (show devServerPort)
+  logSuccess $ "Watching for changes on http://localhost:" ++ show devServerPort
 
   liftIO $ withManager $ \mgr -> do
     let markDirty _ = atomically $ writeTVar dirty True
+        notBuildOutput e = not $ (staticDir </> "js") `isInfixOf` eventPath e
 
     void $ watchTree mgr (cwd </> postsDir) (const True) markDirty
-    void $ watchTree mgr (cwd </> staticDir) (const True) markDirty
+    void $ watchTree mgr (cwd </> staticDir) notBuildOutput markDirty
+    void $ watchTree mgr (cwd </> "js" </> "src") (const True) markDirty
 
     void $ forkIO $ forever $ do
       threadDelay (rebuildDebounceMs * 1000)
@@ -174,7 +214,7 @@ watchAndServe withSearch = do
       when isDirty $ do
         atomically $ writeTVar dirty False
         runStdoutLoggingT $ do
-          $(logInfo) "\nRebuild triggered..."
+          logRebuild "Rebuilding..."
           buildSite DevelopmentMode
           when withSearch runPagefind
 

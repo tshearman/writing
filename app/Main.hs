@@ -9,7 +9,7 @@ import SSG.Build (BuildMode (..), buildSite, cleanSite, watchAndServe)
 data Command
   = Build
   | Clean
-  | Watch {withSearch :: Bool}
+  | Watch {_withSearch :: Bool}
 
 commandParser :: Parser Command
 commandParser =

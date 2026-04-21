@@ -1,0 +1,9 @@
+{
+  "name": "ssg-components",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "preact": "^10.19.0",
+    "strftime": "^0.10.3"
+  }
+}

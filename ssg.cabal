@@ -10,15 +10,19 @@ library
     SSG.Build
     SSG.Config
     SSG.CodeValidator
+    Utils.Log
+    Utils.TH
     Site.Layout
     Site.Pages.Home
     Site.Pages.Post
     Site.Pages.Archive
     Site.Pages.Search
     Site.Components.PostCard
+    Site.Components.Tags
     Site.Components.KaTeX
     Site.Components.Nav
-    Site.Utils.Format
+    Utils.FileSystem
+    Utils.Format
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-options: -Wall
@@ -27,6 +31,7 @@ library
     , async
     , text
     , aeson
+    , template-haskell
     , yaml
     , pandoc               >= 3.0
     , pandoc-types         >= 1.23
@@ -44,6 +49,7 @@ library
     , process
     , temporary
     , transformers
+    , regex-tdfa
 
 executable ssg
   main-is: Main.hs

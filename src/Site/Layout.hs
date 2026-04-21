@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Site.Layout
-  ( renderPage,
-  )
-where
+module Site.Layout (renderPage) where
 
 import Data.Text (Text)
 import Lucid

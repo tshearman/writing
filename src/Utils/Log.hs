@@ -1,0 +1,81 @@
+module Utils.Log
+  ( timed,
+    logStep,
+    logSuccess,
+    logError,
+    logDim,
+    logRebuild,
+    handleProcessResult,
+    green,
+    cyan,
+    yellow,
+    red,
+    dim,
+    reset,
+  )
+where
+
+import Control.Monad (unless)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Time.Clock (diffUTCTime, getCurrentTime)
+import System.Exit (ExitCode (..))
+import System.IO (hFlush, stdout)
+import Text.Printf (printf)
+
+-- ANSI color codes
+green, cyan, yellow, red, dim, reset :: String
+green = "\ESC[32m"
+cyan = "\ESC[36m"
+yellow = "\ESC[33m"
+red = "\ESC[31m"
+dim = "\ESC[2m"
+reset = "\ESC[0m"
+
+timed :: MonadIO m => String -> m a -> m a
+timed label action = do
+  logStep label
+  start <- liftIO getCurrentTime
+  result <- action
+  end <- liftIO getCurrentTime
+  let ms = realToFrac (diffUTCTime end start) * 1000 :: Double
+  logDim $ "  Done in " ++ formatMs ms
+  pure result
+
+formatMs :: Double -> String
+formatMs ms
+  | ms < 1000 = printf "%.0fms" ms
+  | otherwise = printf "%.2fs" (ms / 1000)
+
+logStep :: MonadIO m => String -> m ()
+logStep msg = liftIO $ do
+  putStrLn $ cyan ++ "→ " ++ reset ++ msg
+  hFlush stdout
+
+logSuccess :: MonadIO m => String -> m ()
+logSuccess msg = liftIO $ do
+  putStrLn $ green ++ "✓ " ++ reset ++ msg
+  hFlush stdout
+
+logError :: MonadIO m => String -> m ()
+logError msg = liftIO $ do
+  putStrLn $ red ++ "✗ " ++ reset ++ msg
+  hFlush stdout
+
+logDim :: MonadIO m => String -> m ()
+logDim msg = liftIO $ do
+  putStrLn $ dim ++ msg ++ reset
+  hFlush stdout
+
+logRebuild :: MonadIO m => String -> m ()
+logRebuild msg = liftIO $ do
+  putStrLn $ "\n" ++ yellow ++ "↻ " ++ reset ++ msg
+  hFlush stdout
+
+handleProcessResult :: MonadIO m => String -> (ExitCode, String, String) -> m ()
+handleProcessResult processName (exitCode, out, err) =
+  case exitCode of
+    ExitSuccess -> pure ()
+    ExitFailure _ -> do
+      logError $ processName ++ " failed:"
+      unless (null out) $ liftIO $ putStrLn out
+      unless (null err) $ liftIO $ putStrLn err

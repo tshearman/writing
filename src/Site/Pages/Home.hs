@@ -1,16 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Site.Pages.Home
-  ( renderHomePage,
-  )
-where
+module Site.Pages.Home (renderHomePage) where
 
 import Lucid
-import SSG.Post (Post (..))
+import SSG.Post (Post, Sorted)
 import Site.Components.PostCard (renderPostCard)
 import Site.Layout (renderPage)
 
-renderHomePage :: [Post] -> Html ()
+renderHomePage :: Sorted Post -> Html ()
 renderHomePage posts =
   renderPage "Home" $
     div_ [class_ "post-list"] $ do

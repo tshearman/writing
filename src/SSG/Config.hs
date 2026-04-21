@@ -6,11 +6,12 @@ module SSG.Config
     outputDir,
     markdownExt,
     htmlExt,
-    homepageFile,
     frontmatterDelimiter,
     devServerPort,
     rebuildDebounceMs,
     siteTitle,
+    haskellPreamblePath,
+    pythonPreamblePath,
   )
 where
 
@@ -31,9 +32,6 @@ markdownExt = ".md"
 htmlExt :: String
 htmlExt = ".html"
 
-homepageFile :: FilePath
-homepageFile = "index.html"
-
 frontmatterDelimiter :: Text
 frontmatterDelimiter = "---\n"
 
@@ -45,3 +43,9 @@ rebuildDebounceMs = 1000
 
 siteTitle :: String
 siteTitle = "writing"
+
+haskellPreamblePath :: FilePath
+haskellPreamblePath = "config/haskell-preamble.hs"
+
+pythonPreamblePath :: FilePath
+pythonPreamblePath = "config/python-preamble.py"
