@@ -1,17 +1,24 @@
 module Utils.Log
   ( timed,
+    log,
+    logDim,
     logStep,
     logSuccess,
     logError,
-    logDim,
     logRebuild,
     handleProcessResult,
+    -- Colors
     green,
     cyan,
     yellow,
     red,
     dim,
     reset,
+    -- Symbols
+    symStep,
+    symSuccess,
+    symError,
+    symRebuild,
   )
 where
 
@@ -21,6 +28,7 @@ import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import System.Exit (ExitCode (..))
 import System.IO (hFlush, stdout)
 import Text.Printf (printf)
+import Prelude hiding (log)
 
 -- ANSI color codes
 green, cyan, yellow, red, dim, reset :: String
@@ -30,6 +38,32 @@ yellow = "\ESC[33m"
 red = "\ESC[31m"
 dim = "\ESC[2m"
 reset = "\ESC[0m"
+
+-- Symbols
+symStep, symSuccess, symError, symRebuild :: String
+symStep = "→ "
+symSuccess = "✓ "
+symError = "✗ "
+symRebuild = "↻ "
+
+-- Core logging: colored symbol + message
+log :: MonadIO m => String -> String -> String -> m ()
+log color symbol msg = liftIO $ do
+  putStrLn $ color ++ symbol ++ reset ++ msg
+  hFlush stdout
+
+-- Dim logging: entire message is dimmed, no symbol
+logDim :: MonadIO m => String -> m ()
+logDim msg = liftIO $ do
+  putStrLn $ dim ++ msg ++ reset
+  hFlush stdout
+
+-- Convenience aliases
+logStep, logSuccess, logError, logRebuild :: MonadIO m => String -> m ()
+logStep = log cyan symStep
+logSuccess = log green symSuccess
+logError = log red symError
+logRebuild = log yellow ("\n" ++ symRebuild)
 
 timed :: MonadIO m => String -> m a -> m a
 timed label action = do
@@ -45,31 +79,6 @@ formatMs :: Double -> String
 formatMs ms
   | ms < 1000 = printf "%.0fms" ms
   | otherwise = printf "%.2fs" (ms / 1000)
-
-logStep :: MonadIO m => String -> m ()
-logStep msg = liftIO $ do
-  putStrLn $ cyan ++ "→ " ++ reset ++ msg
-  hFlush stdout
-
-logSuccess :: MonadIO m => String -> m ()
-logSuccess msg = liftIO $ do
-  putStrLn $ green ++ "✓ " ++ reset ++ msg
-  hFlush stdout
-
-logError :: MonadIO m => String -> m ()
-logError msg = liftIO $ do
-  putStrLn $ red ++ "✗ " ++ reset ++ msg
-  hFlush stdout
-
-logDim :: MonadIO m => String -> m ()
-logDim msg = liftIO $ do
-  putStrLn $ dim ++ msg ++ reset
-  hFlush stdout
-
-logRebuild :: MonadIO m => String -> m ()
-logRebuild msg = liftIO $ do
-  putStrLn $ "\n" ++ yellow ++ "↻ " ++ reset ++ msg
-  hFlush stdout
 
 handleProcessResult :: MonadIO m => String -> (ExitCode, String, String) -> m ()
 handleProcessResult processName (exitCode, out, err) =
