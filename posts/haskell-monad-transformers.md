@@ -12,31 +12,3 @@ Monad transformers allow you to combine the effects of multiple monads into a si
 ## The Problem: Composing Monads
 
 ## What is a Monad Transformer?
-
-## Common Transformers
-
-### ReaderT
-
-### StateT
-
-### ExceptT
-
-### WriterT
-
-## Building a Monad Stack
-
-```haskell
-```
-
-## The mtl Approach
-
-## Lifting Operations
-
-## Practical Example
-
-```haskell
-```
-
-## Design Considerations
-
-## Further Reading

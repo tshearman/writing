@@ -20,12 +20,5 @@ Template Haskell (TH) is GHC's compile-time metaprogramming facility. It lets yo
 ## A Simple Example
 
 ```haskell
+
 ```
-
-## Common Use Cases
-
-## Debugging TH Code
-
-## Limitations and Trade-offs
-
-## Further Reading
