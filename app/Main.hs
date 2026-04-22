@@ -2,9 +2,9 @@
 
 module Main (main) where
 
-import Control.Monad.Logger (runStdoutLoggingT)
 import Options.Applicative
-import SSG.Build (BuildMode (..), buildSite, cleanSite, watchAndServe)
+import SSG.App (BuildMode (..), runApp)
+import SSG.Build (buildSite, cleanSite, watchAndServe)
 
 data Command
   = Build
@@ -36,6 +36,6 @@ main = do
           (fullDesc <> progDesc "Custom Haskell static site generator")
       )
   case cmd of
-    Build -> runStdoutLoggingT (buildSite ProductionMode)
-    Clean -> runStdoutLoggingT cleanSite
-    Watch search -> runStdoutLoggingT (watchAndServe search)
+    Build -> runApp ProductionMode True buildSite
+    Clean -> runApp ProductionMode False cleanSite
+    Watch search -> runApp DevelopmentMode search watchAndServe

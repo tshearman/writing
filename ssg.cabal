@@ -5,6 +5,7 @@ build-type:     Simple
 
 library
   exposed-modules:
+    SSG.App
     SSG.Post
     SSG.Render
     SSG.Build
@@ -28,6 +29,7 @@ library
   ghc-options: -Wall
   build-depends:
     , base                  >= 4.12 && < 5
+    , mtl
     , async
     , text
     , aeson
