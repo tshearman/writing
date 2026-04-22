@@ -28,7 +28,6 @@ import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai.Handler.Warp as Warp
 import SSG.CodeValidator (ValidationError (..), ValidationResult (..), validatePost)
 import SSG.Config (devServerPort, htmlExt, markdownExt, outputDir, postsDir, rebuildDebounceMs, staticDir)
-import Utils.Log (handleProcessResult, logDim, logError, logRebuild, logSuccess, timed)
 import SSG.Post (ParseError, Post (..), byDateDesc, loadPost, sorted)
 import qualified SSG.Post as Post
 import Site.Pages.Archive (renderArchivePage)
@@ -46,6 +45,7 @@ import System.FSNotify (eventPath, watchTree, withManager)
 import System.FilePath (takeExtension, (</>))
 import System.Process (callProcess, readProcessWithExitCode)
 import Utils.FileSystem (copyDir, copyPath)
+import Utils.Log (handleProcessResult, logDim, logError, logRebuild, logSuccess, timed)
 
 data BuildMode = ProductionMode | DevelopmentMode
   deriving (Eq)
@@ -206,6 +206,7 @@ watchAndServe withSearch = do
 
     void $ watchTree mgr (cwd </> postsDir) (const True) markDirty
     void $ watchTree mgr (cwd </> staticDir) notBuildOutput markDirty
+    void $ watchTree mgr (cwd </> "src") (const True) markDirty
     void $ watchTree mgr (cwd </> "js" </> "src") (const True) markDirty
 
     void $ forkIO $ forever $ do

@@ -123,7 +123,8 @@ commonmarkReaderOpts =
             Ext_autolink_bare_uris,
             Ext_pipe_tables,
             Ext_task_lists,
-            Ext_smart
+            Ext_smart,
+            Ext_attributes
           ]
     }
 
